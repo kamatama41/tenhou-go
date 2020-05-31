@@ -25,7 +25,7 @@ func (r *Reader) ReadAll() {
 	r.p.Printf("ルール: %s", r.ml.GameInfo.Name())
 	r.p.Printf("プレイヤー")
 	for _, p := range r.ml.Players {
-		r.p.Printf(" %s %s %d %s", p.Name, p.Dan.Name(), p.Rate.I, p.Sex)
+		r.p.Printf(" %s %s %.2f %s", p.Name, p.Dan.Name(), p.Rate, p.Sex)
 	}
 	r.p.Printf("対局開始")
 	for _, event := range r.ml.Events {
@@ -125,8 +125,8 @@ func (r *Reader) printAgari(agari *Agari) {
 	r.p.Printf(" 得点: %d翻%d符 %d点", agari.Han, agari.Fu, agari.Ten)
 	r.p.Printf(" 積み棒%d本 リーチ棒%d本", agari.TsumiBo, agari.ReachBo)
 	r.p.Printf(" 点数移動: %s", agari.SC)
-	if agari.Owari != "" {
-		r.p.Printf("終局 %s", agari.Owari)
+	if agari.Owari != nil {
+		r.printOwari(agari.Owari)
 	}
 }
 
@@ -136,8 +136,15 @@ func (r *Reader) printRyuKyoku(ryuKyoku *Ryuukyoku) {
 		r.p.Printf(" 理由: %s", ryuKyoku.Type.Name())
 	}
 	r.p.Printf(" 点数移動: %s", ryuKyoku.SC)
-	if ryuKyoku.Owari != "" {
-		r.p.Printf("終局 %s", ryuKyoku.Owari)
+	if ryuKyoku.Owari != nil {
+		r.printOwari(ryuKyoku.Owari)
+	}
+}
+
+func (r *Reader) printOwari(owari GameResult) {
+	r.p.Printf("終局")
+	for _, res := range owari.Sort() {
+		r.p.Printf(" %s 点数:%d ポイント:%.1f", r.pn(res.Player), res.Ten, res.Point)
 	}
 }
 

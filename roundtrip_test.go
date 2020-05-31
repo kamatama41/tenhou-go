@@ -13,6 +13,12 @@ import (
 )
 
 func TestRoundtrip(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("The test did panic. %v", r)
+		}
+	}()
+
 	root := "testdata/sample.mjlog"
 
 	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
