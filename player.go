@@ -4,16 +4,22 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
-type Players [4]Player
+type Players []Player
 
 type Player struct {
 	Name PlayerName
 	Rate Rate
 	Dan  Dan
 	Sex  string
+}
+
+var defaultPlayer = Player{
+	Name: "",
+	Rate: 1500.0,
+	Dan:  0,
+	Sex:  "C",
 }
 
 type PlayerIndex int
@@ -52,28 +58,20 @@ func (p *Players) UnmarshalMJLog(e XmlElement) error {
 		if err != nil {
 			return err
 		}
+		// サンマの4人目の場合
 		if name == "" {
-			p[pi] = Player{
-				Name: "",
-				Rate: RateDefault,
-				Dan:  0,
-				Sex:  "C",
-			}
 			continue
 		}
-		rate := Rate{}
-		if err := rate.Unmarshal(rates[pi]); err != nil {
-			return err
-		}
+		rate, err := strconv.ParseFloat(rates[pi], 64)
 		dan := dans[pi]
 		sex := sexes[pi]
 
-		p[pi] = Player{
+		*p = append(*p, Player{
 			Name: name,
-			Rate: rate,
+			Rate: Rate(rate),
 			Dan:  Dan(dan),
 			Sex:  sex,
-		}
+		})
 	}
 	return nil
 }
@@ -86,12 +84,15 @@ func (p *Players) MarshalMJLog() (XmlElement, error) {
 	var dan []string
 	var rate []string
 	var sx []string
-	for _, pi := range AllPlayerIndexes {
-		// n0-n3
-		player := p[pi]
-		elem.AppendAttr(fmt.Sprintf("n%d", pi), player.Name.Encode())
+	for i := range AllPlayerIndexes {
+		// n0-n3 (サンマの場合はデータが無いのでデフォルト値を追加する)
+		player := defaultPlayer
+		if i < len(*p) {
+			player = (*p)[i]
+		}
+		elem.AppendAttr(fmt.Sprintf("n%d", i), player.Name.Encode())
 
-		dan = append(dan, strconv.Itoa(int(player.Dan)))
+		dan = append(dan, player.Dan.String())
 		rate = append(rate, player.Rate.String())
 		sx = append(sx, player.Sex)
 	}
@@ -223,30 +224,10 @@ func (d Dan) Name() string {
 }
 
 // rateは"1947.54" のように小数点付きで来るので小数も一応保持しておく
-type Rate struct {
-	I int
-	D int
-}
+type Rate float64
 
-var RateDefault = Rate{1500, 0}
-
-func (r *Rate) String() string {
-	return fmt.Sprintf("%d.%02d", r.I, r.D)
-}
-
-func (r *Rate) Unmarshal(rate string) error {
-	split := strings.Split(rate, ".")
-	i, err := strconv.Atoi(split[0])
-	if err != nil {
-		return err
-	}
-	r.I = i
-	d, err := strconv.Atoi((split[1] + "0")[:2])
-	if err != nil {
-		return err
-	}
-	r.D = d
-	return nil
+func (r Rate) String() string {
+	return fmt.Sprintf("%.2f", r)
 }
 
 // Ensure Players implements MJLogElement

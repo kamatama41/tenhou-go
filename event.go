@@ -2,6 +2,7 @@ package tenhou
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -356,7 +357,7 @@ type Agari struct {
 	TsumiBo    int
 	ReachBo    int
 	SC         string
-	Owari      string
+	Owari      GameResult
 }
 
 func (a *Agari) IsRon() bool {
@@ -478,9 +479,9 @@ func (a *Agari) UnmarshalMJLog(e XmlElement) error {
 			a.SC = value
 		case "owari":
 			// 対局が終わったときに入る最終的な得点とポイント
-			//  "0の得点,0のポイント,1の得点,..."
-			// 使わないので保存だけ
-			a.Owari = value
+			if err := a.Owari.Unmarshal(value); err != nil {
+				return err
+			}
 		default:
 			return newUnknownAttrErr(name, value)
 		}
@@ -525,8 +526,8 @@ func (a *Agari) MarshalMJLog() (XmlElement, error) {
 	elem.AppendAttr("who", a.Who.String())
 	elem.AppendAttr("fromWho", a.From.String())
 	elem.AppendAttr("sc", a.SC)
-	if a.Owari != "" {
-		elem.AppendAttr("owari", a.Owari)
+	if !a.Owari.IsZero() {
+		elem.AppendAttr("owari", a.Owari.Marshal())
 	}
 	return elem, nil
 }
@@ -538,7 +539,7 @@ type Ryuukyoku struct {
 	Tenpai  map[PlayerIndex]HaiList
 	Type    RyuukyokuType
 	SC      string
-	Owari   string
+	Owari   GameResult
 }
 
 type RyuukyokuType string
@@ -603,7 +604,9 @@ func (r *Ryuukyoku) UnmarshalMJLog(e XmlElement) error {
 			r.SC = value
 		case "owari":
 			// agariのowariと同じ
-			r.Owari = value
+			if err := r.Owari.Unmarshal(value); err != nil {
+				return err
+			}
 		default:
 			return newUnknownAttrErr(name, value)
 		}
@@ -629,8 +632,73 @@ func (r *Ryuukyoku) MarshalMJLog() (XmlElement, error) {
 		}
 		elem.AppendAttr(fmt.Sprintf("hai%d", pi), joinByCommaFromInts(hai.IDs()))
 	}
-	if r.Owari != "" {
-		elem.AppendAttr("owari", r.Owari)
+	if !r.Owari.IsZero() {
+		elem.AppendAttr("owari", r.Owari.Marshal())
 	}
 	return elem, nil
+}
+
+type GameResult []struct {
+	Player PlayerIndex
+	Ten    int
+	Point  Point
+}
+
+// "0の得点,0のポイント,1の得点,..."の形式 (pointは100で割った値が入っている)
+func (g *GameResult) Unmarshal(owari string) error {
+	tenAndPoint := splitByComma(owari)
+	for i := 0; i < len(tenAndPoint); i += 2 {
+		ten, err := strconv.Atoi(tenAndPoint[i])
+		if err != nil {
+			return err
+		}
+		point, err := strconv.ParseFloat(tenAndPoint[i+1], 64)
+		if err != nil {
+			return err
+		}
+		pi, err := NewPlayerIndex(i / 2)
+		if err != nil {
+			return err
+		}
+		// サンマの4人目は "0,0" になるため除外
+		if ten == 0 && point == 0 {
+			continue
+		}
+		*g = append(*g, struct {
+			Player PlayerIndex
+			Ten    int
+			Point  Point
+		}{pi, ten * 100, Point(point)})
+	}
+	return nil
+}
+
+func (g GameResult) Marshal() string {
+	var res []string
+	for _, r := range g {
+		res = append(res, fmt.Sprintf("%d,%s", r.Ten/100, r.Point.String()))
+	}
+	// サンマのときは4人目を追加
+	if len(g) == 3 {
+		res = append(res, "0,0")
+	}
+	return strings.Join(res, ",")
+}
+
+func (g GameResult) IsZero() bool {
+	return len(g) == 0
+}
+
+// ポイント順でソートする
+func (g GameResult) Sort() GameResult {
+	var res GameResult
+	res = append(res, g...)
+	sort.Slice(res, func(i, j int) bool { return res[i].Point > res[j].Point })
+	return res
+}
+
+type Point float64
+
+func (p Point) String() string {
+	return fmt.Sprintf("%.1f", p)
 }
